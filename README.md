@@ -1,2 +1,2 @@
 # mayaborger-genesis
-Maya Fey's Borger Eating Simulator from https://thebuddyadrian.itch.io/maya-borgers, being de-maked as a Sega Genesis/MegaDrive game
+Maya Fey's Borger Eating Simulator from https://thebuddyadrian.itch.io/maya-borgers, being de-maked to the Sega Genesis/MegaDrive with SGDK
