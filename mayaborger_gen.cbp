@@ -27,6 +27,7 @@
 		<Unit filename="res/gfx.h" />
 		<Unit filename="res/gfx.res" />
 		<Unit filename="res/gfx/title.png" />
+		<Unit filename="res/sprite.res" />
 		<Unit filename="src/main.c">
 			<Option compilerVar="CC" />
 		</Unit>
