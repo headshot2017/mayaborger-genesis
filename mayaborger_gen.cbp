@@ -24,10 +24,12 @@
 		<Compiler>
 			<Add option="-Wall" />
 		</Compiler>
-		<Unit filename="res/gfx.h" />
 		<Unit filename="res/gfx.res" />
+		<Unit filename="res/gfx/ground.png" />
 		<Unit filename="res/gfx/title.png" />
 		<Unit filename="res/sprite.res" />
+		<Unit filename="res/sprite/maya.png" />
+		<Unit filename="res/sprite/pickups.png" />
 		<Unit filename="src/main.c">
 			<Option compilerVar="CC" />
 		</Unit>

@@ -24,8 +24,8 @@ const struct
 } rom_header = {
     "SEGA MEGA DRIVE ",
     "HEADSHOTNOBY2019",
-    "MAYA'S BORGER EATING SIMULATOR                  ",
-    "MAYA'S BORGER EATING SIMULATOR                  ",
+    "MAYA FEY'S BORGER EATING SIMULATOR              ",
+    "MAYA FEY'S BORGER EATING SIMULATOR              ",
     "GM 00000000-00",
     0x0000,
     "JD              ",
