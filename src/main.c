@@ -5,6 +5,8 @@
 #define ANIM_STAND      0
 #define ANIM_RUN        1
 #define ANIM_JUMP       2
+#define ANIM_DIE        3
+#define ANIM_GET_UP     4
 
 #define ENT_BORGER      0
 #define ENT_THINKER      1
@@ -19,6 +21,7 @@ typedef enum
 
 Sprite* spr_player;
 bool pl_canmove;
+u16 pl_deadtime;
 fix32 pl_x;
 fix32 pl_y;
 fix32 pl_hspeed;
@@ -48,6 +51,7 @@ bool boundingBox(s16 x1, s16 y1, s16 w1, s16 h1,  s16 x2, s16 y2, s16 w2, s16 h2
 GameState gamestate;
 u8 spr_mayaskin;
 u16 m_borger_score;
+u16 m_timeleft;
 fix32 ground_y = FIX32(24*8);
 const char *str_mayaskin[4] = {"Normal Maya", "Nerdy Maya", "Magician Maya", "Thief Maya"};
 
@@ -57,7 +61,7 @@ int main()
     SPR_init();
     VDP_setPaletteColors(0, (u16*) palette_black, 64);
 
-    spr_mayaskin = m_borger_score = 0;
+    spr_mayaskin = m_borger_score = m_timeleft = pl_deadtime = 0;
     changeState(STATE_TITLE);
 
     while (1)
@@ -79,17 +83,25 @@ void stateLoop()
     }
     else if (gamestate == STATE_INGAME)
     {
+        m_timeleft--;
+        if (m_timeleft == 0)
+        {
+            changeState(STATE_RESULTS);
+            return;
+        }
+
         char msg[96];
         sprintf(msg, "P1 ate %d borgers", m_borger_score);
         VDP_clearText(1, 1, 40-1);
         VDP_drawText(msg, 1, 1);
-        VDP_drawText("Time: 60", 40-1-8, 1);
+        sprintf(msg, "Time: %d", m_timeleft/60+1);
+        VDP_drawText(msg, 40-1-8, 1);
 
         updatePlayerPhys();
         updatePlayerAnim();
         updateEntities();
 
-        if (random() % 5000 >= 4900)
+        if (random() % 5000 >= 4850)
         {
             bool is_thinker = (random() % 500 >= 400);
             addEntity(is_thinker);
@@ -101,8 +113,10 @@ void changeState(GameState newState)
 {
     VDP_clearPlan(PLAN_B, TRUE);
     VDP_clearTextArea(0, 0, 320/8, 224/8);
+    VDP_clearSprites();
 
     u16 ind = TILE_USERINDEX;
+    char msg[96];
     GameState oldState = gamestate;
     gamestate = newState;
 
@@ -112,13 +126,30 @@ void changeState(GameState newState)
         SPR_releaseSprite(spr_player);
         spr_player = NULL;
     }
+    else if (oldState == STATE_INGAME)
+    {
+        SPR_releaseSprite(spr_player);
+        spr_player = NULL;
+        for (u16 i=0; i<64; i++)
+        {
+            if (spr_entity[i])
+            {
+                SPR_releaseSprite(spr_entity[i]);
+                spr_entity[i] = NULL;
+            }
+        }
+    }
 
     // initialize new state
     if (newState == STATE_TITLE)
     {
-        VDP_setTextPalette(PAL0);
         VDP_drawImageEx(PLAN_B, &img_title, TILE_ATTR_FULL(PAL0, FALSE, FALSE, FALSE, ind), 0, 0, TRUE, TRUE);
+        VDP_setPalette(PAL1, palette_black);
+
+        VDP_setTextPalette(PAL0);
         VDP_drawText("PRESS START", 27, 24);
+        VDP_setTextPalette(PAL1);
+        VDP_drawText("DEMO", 40-7, 7);
     }
     else if (newState == STATE_MENU)
     {
@@ -132,6 +163,8 @@ void changeState(GameState newState)
         SPR_setHFlip(spr_player, TRUE);
 
         VDP_drawText("Setup game", 2, 1);
+        VDP_drawText("How many borgers can you eat in", 4, 3);
+        VDP_drawText("60 seconds?", 4, 4);
         VDP_drawText("<     >", 24, 17);
         VDP_drawText("Press START to play", 38-19, 26);
     }
@@ -149,9 +182,20 @@ void changeState(GameState newState)
         SPR_setAnim(spr_player, ANIM_STAND);
         SPR_setHFlip(spr_player, TRUE);
         pl_canmove = TRUE;
+        pl_deadtime = 0;
         pl_gravity = pl_hspeed = pl_vspeed = pl_x_acc = FIX32(0);
         pl_x = FIX32(160-32);
         pl_y = FIX32(224/2);
+        m_timeleft = 60*60;
+    }
+
+    else if (newState == STATE_RESULTS)
+    {
+        sprintf(msg, "You ate %d borgers in 60 seconds!", m_borger_score);
+        VDP_setPaletteColor(PAL0, 0xffff);
+        VDP_setPalette(PAL1, palette_black);
+        VDP_drawText(msg, 1, 1);
+        VDP_drawText("Press any button to continue", 6, 26);
     }
 }
 
@@ -174,6 +218,12 @@ static void joyEvent(u16 joy, u16 changed, u16 state)
         if (changed & state & (BUTTON_A | BUTTON_B | BUTTON_C) && pl_y >= ground_y-FIX32(62) && pl_canmove)
             pl_vspeed = FIX32(-6);
     }
+
+    else if (gamestate == STATE_RESULTS)
+    {
+        if (changed & state & (BUTTON_A | BUTTON_B | BUTTON_C | BUTTON_START))
+            changeState(STATE_MENU);
+    }
 }
 
 static void updatePlayerPhys()
@@ -185,9 +235,22 @@ static void updatePlayerPhys()
         pl_x_acc = FIX32(0.25);
     else
     {
-        if (pl_hspeed > 0) pl_x_acc = FIX32(-0.25);
-        else if (pl_hspeed < 0) pl_x_acc = FIX32(0.25);
-        else pl_x_acc = FIX32(0);
+        if (pl_canmove)
+        {
+            if (pl_hspeed > 0) pl_x_acc = FIX32(-0.25);
+            else if (pl_hspeed < 0) pl_x_acc = FIX32(0.25);
+            else pl_x_acc = FIX32(0);
+        }
+        else
+        {
+            if (pl_y >= ground_y-FIX32(62))
+            {
+                if (pl_hspeed > 0) pl_x_acc = FIX32(-0.25);
+                else if (pl_hspeed < 0) pl_x_acc = FIX32(0.25);
+                else pl_x_acc = FIX32(0);
+            }
+            else pl_x_acc = FIX32(0);
+        }
     }
 
     if (pl_y < ground_y-FIX32(62)) // above ground
@@ -218,22 +281,51 @@ static void updatePlayerAnim()
     if (value & BUTTON_LEFT) SPR_setHFlip(spr_player, FALSE);
     if (value & BUTTON_RIGHT) SPR_setHFlip(spr_player, TRUE);
 
-    if (pl_y < ground_y-FIX32(62))
+    if (pl_canmove)
     {
-        SPR_setAnim(spr_player, ANIM_JUMP);
-        if (pl_vspeed >= FIX32(-1.2))
+        if (pl_y < ground_y-FIX32(62))
         {
-            if (spr_player->frameInd >= 6) {SPR_setFrame(spr_player, 7);}
+            SPR_setAnim(spr_player, ANIM_JUMP);
+            if (pl_vspeed >= FIX32(-1.2))
+            {
+                if (spr_player->frameInd >= 6) {SPR_setFrame(spr_player, 7);}
+            }
+            else SPR_setFrame(spr_player, 0);
         }
-        else {SPR_setFrame(spr_player, 0);}
+
+        else
+        {
+            if (value & BUTTON_RIGHT || value & BUTTON_LEFT)
+                SPR_setAnim(spr_player, ANIM_RUN);
+            else
+                SPR_setAnim(spr_player, ANIM_STAND);
+        }
     }
 
     else
     {
-        if (value & BUTTON_RIGHT || value & BUTTON_LEFT)
-            SPR_setAnim(spr_player, ANIM_RUN);
-        else
-            SPR_setAnim(spr_player, ANIM_STAND);
+        if (spr_player->animInd == ANIM_DIE)
+        {
+            if (spr_player->frameInd >= spr_player->animation->length-2)
+                SPR_setFrame(spr_player, spr_player->animation->length-2);
+
+            if (pl_y >= ground_y-FIX32(62) && pl_hspeed == 0)
+            {
+                pl_deadtime--;
+                if (!pl_deadtime)
+                {
+                    SPR_setAnim(spr_player, ANIM_GET_UP);
+                }
+            }
+        }
+
+        else if (spr_player->animInd == ANIM_GET_UP)
+        {
+            if (spr_player->frameInd >= spr_player->animation->length-2)
+            {
+                pl_canmove = TRUE; // the animation is set automatically afterwards
+            }
+        }
     }
 }
 
@@ -250,22 +342,33 @@ static void updateEntities()
                 SPR_releaseSprite(spr_entity[i]);
                 spr_entity[i] = NULL;
             }
-            else if (boundingBox(fix32ToInt(pl_x), fix32ToInt(pl_y), 48, 48, fix32ToInt(ent_x[i]), fix32ToInt(ent_y[i]), 24, 24))
-            {
-                if (spr_entity[i]->animInd == ENT_BORGER)
-                    m_borger_score++;
-                else
-                {
-                    m_borger_score = 0;
-                }
-
-                SPR_releaseSprite(spr_entity[i]);
-                spr_entity[i] = NULL;
-                continue;
-            }
             else
             {
-                SPR_setPosition(spr_entity[i], fix32ToInt(ent_x[i]), fix32ToInt(ent_y[i]));
+                bool coll = FALSE;
+                if (boundingBox(fix32ToInt(pl_x)+8, fix32ToInt(pl_y), 44, 48, fix32ToInt(ent_x[i]), fix32ToInt(ent_y[i]), 24, 24) && spr_entity[i]->animInd == ENT_BORGER)
+                {
+                    m_borger_score++;
+                    coll = TRUE;
+                }
+                else if (boundingBox(fix32ToInt(pl_x)+6, fix32ToInt(pl_y), 40, 48, fix32ToInt(ent_x[i]), fix32ToInt(ent_y[i]), 8, 24) && spr_entity[i]->animInd == ENT_THINKER)
+                {
+                    m_borger_score = 0;
+                    coll = TRUE;
+                    SPR_setAnim(spr_player, ANIM_DIE);
+                    pl_canmove = FALSE;
+                    pl_deadtime = 45;
+                }
+
+                if (coll)
+                {
+                    SPR_releaseSprite(spr_entity[i]);
+                    spr_entity[i] = NULL;
+                    continue;
+                }
+                else
+                {
+                    SPR_setPosition(spr_entity[i], fix32ToInt(ent_x[i]), fix32ToInt(ent_y[i]));
+                }
             }
         }
     }
