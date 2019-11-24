@@ -182,7 +182,7 @@ void changeState(GameState newState)
         SPR_setAnim(spr_player, ANIM_STAND);
         SPR_setHFlip(spr_player, TRUE);
         pl_canmove = TRUE;
-        pl_deadtime = 0;
+        pl_deadtime = m_borger_score = 0;
         pl_gravity = pl_hspeed = pl_vspeed = pl_x_acc = FIX32(0);
         pl_x = FIX32(160-32);
         pl_y = FIX32(224/2);
