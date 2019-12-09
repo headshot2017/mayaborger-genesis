@@ -9,8 +9,7 @@
 #define ANIM_GET_UP     4
 
 #define ENT_BORGER      0
-#define ENT_THINKER     1
-#define ENT_ACCESSORY   2
+#define ENT_THINKER      1
 
 typedef enum
 {
@@ -20,12 +19,10 @@ typedef enum
     STATE_RESULTS
 } GameState;
 
-const SpriteDefinition* maya_sprites[2] = {&maya_sprite, &nerdymaya_sprite};
-const SpriteDefinition* maya_sprite_accessory[2] = {NULL, &ema_glasses};
+SpriteDefinition* maya_sprites[2] = {&maya_sprite, &nerdymaya_sprite};
 Sprite* spr_player;
 bool pl_canmove;
 u16 pl_deadtime;
-s8 pl_dir;
 fix32 pl_x;
 fix32 pl_y;
 fix32 pl_hspeed;
@@ -34,10 +31,8 @@ fix32 pl_x_acc;
 fix32 pl_gravity;
 
 Sprite* spr_entity[64];
-s16 ent_type[64];
 fix32 ent_x[64];
 fix32 ent_y[64];
-fix32 ent_hspeed[64];
 fix32 ent_vspeed[64];
 fix32 ent_gravity[64];
 
@@ -159,12 +154,14 @@ void changeState(GameState newState)
     }
     else if (newState == STATE_MENU)
     {
+        spr_mayaskin = 0;
+
         VDP_setPaletteColor(PAL0, 0xffff);
         VDP_setPalette(PAL1, palette_black);
         VDP_setTextPalette(PAL1);
 
-        spr_player = SPR_addSprite(maya_sprites[spr_mayaskin], 320 - 128, 224/2 - 48, TILE_ATTR(PAL2, FALSE, FALSE, FALSE));
-        VDP_setPalette(PAL2, maya_sprites[spr_mayaskin]->palette->data);
+        spr_player = SPR_addSprite(maya_sprites[0], 320 - 128, 224/2 - 48, TILE_ATTR(PAL2, FALSE, FALSE, FALSE));
+        VDP_setPalette(PAL2, maya_sprite.palette->data);
         SPR_setAnim(spr_player, ANIM_RUN);
         SPR_setHFlip(spr_player, TRUE);
 
@@ -179,15 +176,14 @@ void changeState(GameState newState)
     {
         VDP_setPaletteColor(PAL0, 0xffff);
         VDP_setPalette(PAL1, img_ground.palette->data);
-        VDP_setPalette(PAL2, maya_sprites[spr_mayaskin]->palette->data);
+        VDP_setPalette(PAL2, maya_sprite.palette->data);
         VDP_setPalette(PAL3, pickup_sprites.palette->data);
         VDP_setTextPalette(PAL1);
         VDP_drawImageEx(PLAN_B, &img_ground, TILE_ATTR_FULL(PAL1, FALSE, FALSE, FALSE, ind), 0, fix32ToInt(ground_y)/8, TRUE, TRUE);
 
-        spr_player = SPR_addSprite(maya_sprites[spr_mayaskin], 160-32, 224/2, TILE_ATTR(PAL2, FALSE, FALSE, FALSE));
+        spr_player = SPR_addSprite(&maya_sprite, 160-32, 224/2, TILE_ATTR(PAL2, FALSE, FALSE, FALSE));
         SPR_setAnim(spr_player, ANIM_STAND);
         SPR_setHFlip(spr_player, TRUE);
-        pl_dir = 1;
         pl_canmove = TRUE;
         pl_deadtime = m_borger_score = 0;
         pl_gravity = pl_hspeed = pl_vspeed = pl_x_acc = FIX32(0);
@@ -223,19 +219,13 @@ static void joyEvent(u16 joy, u16 changed, u16 state)
         {
             if (spr_mayaskin == 0) spr_mayaskin = 2;
             spr_mayaskin--;
-
-            SPR_setDefinition(spr_player, maya_sprites[spr_mayaskin]);
-            VDP_setPalette(PAL2, maya_sprites[spr_mayaskin]->palette->data);
-            SPR_setAnim(spr_player, ANIM_RUN);
+            SPR_setDefinition(spr_player, maya_sprites[spr_mayaskin])
         }
         if (changed & state & BUTTON_RIGHT)
         {
             spr_mayaskin++;
             if (spr_mayaskin >= 2) spr_mayaskin = 0;
-
-            SPR_setDefinition(spr_player, maya_sprites[spr_mayaskin]);
-            VDP_setPalette(PAL2, maya_sprites[spr_mayaskin]->palette->data);
-            SPR_setAnim(spr_player, ANIM_RUN);
+            SPR_setDefinition(spr_player, maya_sprites[spr_mayaskin])
         }
     }
 
@@ -304,8 +294,8 @@ static void updatePlayerPhys()
 static void updatePlayerAnim()
 {
     u16 value = (pl_canmove) ? JOY_readJoypad(JOY_1) : 0;
-    if (value & BUTTON_LEFT) {SPR_setHFlip(spr_player, FALSE); pl_dir = -1;}
-    if (value & BUTTON_RIGHT) {SPR_setHFlip(spr_player, TRUE); pl_dir = 1;}
+    if (value & BUTTON_LEFT) SPR_setHFlip(spr_player, FALSE);
+    if (value & BUTTON_RIGHT) SPR_setHFlip(spr_player, TRUE);
 
     if (pl_canmove)
     {
@@ -362,66 +352,39 @@ static void updateEntities()
         if (spr_entity[i])
         {
             ent_vspeed[i] += ent_gravity[i];
-            ent_x[i] += ent_hspeed[i];
             ent_y[i] += ent_vspeed[i];
-
-            if (ent_type[i] == ENT_BORGER || ent_type[i] == ENT_THINKER)
+            if (ent_y[i] >= ground_y-FIX32(24))
             {
-                if (ent_y[i] >= ground_y-FIX32(24))
-                {
-                    SPR_releaseSprite(spr_entity[i]);
-                    spr_entity[i] = NULL;
-                }
-                else
-                {
-                    bool coll = FALSE;
-                    if (boundingBox(fix32ToInt(pl_x)+8, fix32ToInt(pl_y), 44, 48, fix32ToInt(ent_x[i]), fix32ToInt(ent_y[i]), 24, 24) && spr_entity[i]->animInd == ENT_BORGER)
-                    {
-                        m_borger_score++;
-                        coll = TRUE;
-                    }
-                    else if (boundingBox(fix32ToInt(pl_x)+6, fix32ToInt(pl_y), 40, 48, fix32ToInt(ent_x[i]), fix32ToInt(ent_y[i]), 8, 24) && spr_entity[i]->animInd == ENT_THINKER)
-                    {
-                        m_borger_score = 0;
-                        coll = TRUE;
-                        SPR_setAnim(spr_player, ANIM_DIE);
-                        pl_canmove = FALSE;
-                        pl_deadtime = 45;
-                        if (spr_mayaskin > 0) addEntity(ENT_ACCESSORY);
-                    }
-
-                    if (coll)
-                    {
-                        SPR_releaseSprite(spr_entity[i]);
-                        spr_entity[i] = NULL;
-                        continue;
-                    }
-                    else
-                    {
-                        SPR_setPosition(spr_entity[i], fix32ToInt(ent_x[i]), fix32ToInt(ent_y[i]));
-                    }
-                }
+                SPR_releaseSprite(spr_entity[i]);
+                spr_entity[i] = NULL;
             }
-            else if (ent_type[i] == ENT_ACCESSORY)
+            else
             {
-                if (ent_y[i] >= ground_y-FIX32(spr_entity[i]->frame->h)) // bounce.
+                bool coll = FALSE;
+                if (boundingBox(fix32ToInt(pl_x)+8, fix32ToInt(pl_y), 44, 48, fix32ToInt(ent_x[i]), fix32ToInt(ent_y[i]), 24, 24) && spr_entity[i]->animInd == ENT_BORGER)
                 {
-                    ent_vspeed[i] = -ent_vspeed[i] + FIX32(1);
-                    if (ent_vspeed[i] > FIX32(0))
-                    {
-                        ent_vspeed[i] = FIX32(0);
-                        ent_y[i] = ground_y-FIX32(spr_entity[i]->frame->h);
-                    }
+                    m_borger_score++;
+                    coll = TRUE;
+                }
+                else if (boundingBox(fix32ToInt(pl_x)+6, fix32ToInt(pl_y), 40, 48, fix32ToInt(ent_x[i]), fix32ToInt(ent_y[i]), 8, 24) && spr_entity[i]->animInd == ENT_THINKER)
+                {
+                    m_borger_score = 0;
+                    coll = TRUE;
+                    SPR_setAnim(spr_player, ANIM_DIE);
+                    pl_canmove = FALSE;
+                    pl_deadtime = 45;
                 }
 
-                if (ent_x[i] < FIX32(0 - spr_entity[i]->frame->w) || ent_x[i] > FIX32(320)) // off-screen. destroy.
+                if (coll)
                 {
                     SPR_releaseSprite(spr_entity[i]);
                     spr_entity[i] = NULL;
                     continue;
                 }
                 else
+                {
                     SPR_setPosition(spr_entity[i], fix32ToInt(ent_x[i]), fix32ToInt(ent_y[i]));
+                }
             }
         }
     }
@@ -441,25 +404,12 @@ static void addEntity(s16 type)
 
     if (i != -1)
     {
-        ent_type[i] = type;
+        ent_x[i] = FIX32(random() % (320-24));
+        ent_y[i] = FIX32(-24);
+        ent_vspeed[i] = FIX32(0);
+        ent_gravity[i] = FIX32(0.02);
 
-        if (type == ENT_BORGER || type == ENT_THINKER)
-        {
-            ent_x[i] = FIX32(random() % (320-24));
-            ent_y[i] = FIX32(-24);
-            ent_vspeed[i] = ent_hspeed[i] = FIX32(0);
-            ent_gravity[i] = FIX32(0.02);
-            spr_entity[i] = SPR_addSprite(&pickup_sprites, fix32ToInt(ent_x[i]), -24, TILE_ATTR(PAL3, FALSE, FALSE, FALSE));
-            SPR_setAnim(spr_entity[i], type);
-        }
-        else if (type == ENT_ACCESSORY)
-        {
-            ent_x[i] = pl_x+FIX32(32);
-            ent_y[i] = pl_y+FIX32(8);
-            ent_vspeed[i] = FIX32(-1);
-            ent_hspeed[i] = FIX32(-pl_dir * 3);
-            ent_gravity[i] = FIX32(0.25);
-            spr_entity[i] = SPR_addSprite(maya_sprite_accessory[spr_mayaskin], fix32ToInt(ent_x[i]), fix32ToInt(ent_y[i]), TILE_ATTR(PAL2, FALSE, FALSE, (pl_dir > 0) ? TRUE : FALSE));
-        }
+        spr_entity[i] = SPR_addSprite(&pickup_sprites, fix32ToInt(ent_x[i]), -24, TILE_ATTR(PAL3, FALSE, FALSE, FALSE));
+        SPR_setAnim(spr_entity[i], type);
     }
 }
