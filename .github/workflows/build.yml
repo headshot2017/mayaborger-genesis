@@ -16,8 +16,8 @@ jobs:
       run: |
         mkdir SGDK_PATH
         cd SGDK_PATH
-        wget https://github.com/Stephane-D/SGDK/releases/download/v1.80/sgdk180.7z
-        7z x sgdk180.7z
+        wget https://github.com/Stephane-D/SGDK/releases/download/v1.40/sgdk140.7z
+        7z x sgdk140.7z
         ./build_lib.bat
 
     - name: Build
