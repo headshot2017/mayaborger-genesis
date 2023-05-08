@@ -1,0 +1,30 @@
+name: build
+
+on: [push, pull_request]
+
+jobs:
+  genesis:
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Install Dependencies
+      run: |
+        cup -y openjdk 7zip.install
+        
+    - name: Install SGDK
+      run: |
+        mkdir SGDK_PATH
+        cd SGDK_PATH
+        wget https://github.com/Stephane-D/SGDK/releases/download/v1.80/sgdk180.7z
+        7z x sgdk180.7z
+
+    - name: Build
+      run: |
+        SGDK_PATH\bin\make -f SGDK_PATH\makefile.gen
+
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: ROM file
+        path: ./out/rom.bin
